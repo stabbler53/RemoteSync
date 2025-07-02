@@ -9,6 +9,7 @@ from typing import List, Optional
 import secrets
 from imap_tools.mailbox import MailBox
 from imap_tools.query import A
+from clerk_sdk_python import Clerk
 from models import TeamCreate, TeamSettingsUpdate
 
 load_dotenv()
