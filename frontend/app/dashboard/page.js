@@ -1,17 +1,71 @@
 "use client";
-import { useUser } from "@clerk/nextjs";
-import SubmissionDashboard from "../../components/SubmissionDashboard";
-import { useState } from "react";
+import { useEffect, useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
+import DashboardClient from '../../components/DashboardClient';
 
 export default function DashboardPage() {
-  const { user } = useUser();
-  const [selectedTeam, setSelectedTeam] = useState("");
+  const { getToken } = useAuth();
+  const [dashboardData, setDashboardData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Optionally, add a TeamSelector here for admins
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = await getToken();
+        if (!token) {
+          // No token yet, Clerk is likely still loading.
+          // The effect will re-run when getToken() returns a value.
+          return;
+        }
+        
+        const response = await fetch('/api/dashboard', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex flex-col items-center py-8">
-      <SubmissionDashboard userId={user?.id} teamId={selectedTeam} />
-    </div>
-  );
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'Failed to fetch dashboard data');
+        }
+
+        const data = await response.json();
+        setDashboardData(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [getToken]);
+
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center min-h-screen">
+            <div className="text-lg font-semibold">Loading Dashboard...</div>
+        </div>
+    );
+  }
+
+  if (error) {
+    return (
+        <div className="flex justify-center items-center min-h-screen">
+            <div className="text-red-500 bg-red-100 p-4 rounded-md">Error: {error}</div>
+        </div>
+    );
+  }
+  
+  if (!dashboardData) {
+      return (
+          <div className="flex justify-center items-center min-h-screen">
+              <div className="text-lg">No data found.</div>
+          </div>
+      )
+  }
+
+  return <DashboardClient initialData={dashboardData} />;
 } 

@@ -7,4 +7,6 @@ python-dotenv
 sqlalchemy
 boto3
 supabase
-apscheduler 
+apscheduler
+imap-tools
+clerk-sdk-python 
