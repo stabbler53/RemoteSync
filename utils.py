@@ -9,8 +9,8 @@ from typing import List, Optional
 import secrets
 from imap_tools.mailbox import MailBox
 from imap_tools.query import A
-from clerk_sdk_python import Clerk
 from models import TeamCreate, TeamSettingsUpdate
+from clerk import Clerk  # type: ignore
 
 load_dotenv()
 
@@ -111,7 +111,7 @@ def log_to_db(user_id: str, text: str, summary: str, audio_url: Optional[str], t
 
 def upload_audio_to_supabase(audio_bytes, filename):
     # Upload to the 'audio' bucket (create it in Supabase dashboard if not exists)
-    res = supabase.storage().from_('audio').upload(filename, audio_bytes)
+    res = supabase.storage.from_('audio').upload(filename, audio_bytes)
     if res.get('error'):
         raise Exception(res['error']['message'])
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/audio/{filename}"
@@ -164,6 +164,9 @@ def send_email():
 def process_email_replies():
     """Connects to an IMAP inbox, processes unread standup replies, and logs them."""
     print("Checking for email replies...")
+    if not IMAP_SERVER or not IMAP_USERNAME or not IMAP_PASSWORD:
+        print("IMAP credentials are not set. Skipping email processing.")
+        return
     try:
         with MailBox(IMAP_SERVER).login(IMAP_USERNAME, IMAP_PASSWORD, 'INBOX') as mailbox:
             for msg in mailbox.fetch(A(seen=False)): # Fetch unread messages
@@ -179,10 +182,8 @@ def process_email_replies():
                     # For now, we'll assume the email is the identifier
                     # In a real app, you'd look up the user in your Clerk/Supabase user table
                     user_id = sender_email # Placeholder
-                    
                     # You might also need to determine the team, perhaps from the subject or a default team
                     team_id = "default-team-id" # Placeholder
-
                     print(f"Processing standup from {sender_email}...")
                     summary = summarize_text(standup_text, is_audio=False, summarize=True) or "No summary available."
                     log_to_db(user_id, standup_text, summary, None, team_id)
@@ -342,21 +343,17 @@ def update_team_settings_in_db(team_id: str, settings_data: TeamSettingsUpdate, 
         team = session.query(Team).filter_by(id=team_id).first()
         if not team:
             raise ValueError("Team not found.")
-
-        if team.owner_id != user_id:
+        if str(team.owner_id) != str(user_id):
             raise PermissionError("Only the team owner can update settings.")
-            
         # Update settings if provided
         if settings_data.settings is not None:
             # Merge existing settings with new ones
-            updated_settings = team.settings.copy()
+            updated_settings = dict(team.settings) if team.settings else {}
             updated_settings.update(settings_data.settings)
             team.settings = updated_settings
-        
         # Update report recipients if provided
         if settings_data.report_recipients is not None:
-            team.report_recipients = settings_data.report_recipients
-            
+            team.report_recipients = list(settings_data.report_recipients)
         session.commit()
         session.refresh(team)
         return team
@@ -398,30 +395,24 @@ def generate_daily_report(team_id: str) -> Optional[str]:
     """
     with SessionLocal() as session:
         yesterday = datetime.utcnow() - timedelta(days=1)
-        
         entries = session.query(StandupEntry).filter(
             StandupEntry.team_id == team_id,
             StandupEntry.created_at >= yesterday
         ).order_by(StandupEntry.created_at.asc()).all()
-
         if not entries:
             return None
-
         # Fetch user info for all participants in a single batch
         user_ids = list(set(entry.user_id for entry in entries))
         users_info = {user.id: user for user in clerk.users.get_user_list(user_id=user_ids)}
-
         html_content = "<h1>Daily Standup Summary</h1>"
         for entry in entries:
             user = users_info.get(entry.user_id)
             user_name = f"{user.first_name} {user.last_name}" if user else "Unknown User"
-            
             html_content += f"<h3>{user_name}</h3>"
             html_content += f"<blockquote>{entry.summary.replace(chr(10), '<br>')}</blockquote>"
-            if entry.audio_url:
+            if entry.audio_url and entry.audio_url != '':
                 html_content += f"<p><a href='{entry.audio_url}'>Listen to audio update</a></p>"
             html_content += "<hr>"
-
         return html_content
 
 def process_daily_reports():
@@ -434,32 +425,24 @@ def process_daily_reports():
         teams = session.query(Team).all()
         for team in teams:
             report_time_str = team.settings.get("summaryTime", "17:00")
-            # This is a naive time check. A real app would need timezone awareness.
             report_hour = int(report_time_str.split(":")[0])
-            
-            # Check if it's the hour to send the report (in UTC)
             if datetime.utcnow().hour != report_hour:
                 continue
-
-            recipients = team.report_recipients
+            recipients = list(team.report_recipients or [])
             if not recipients:
                 print(f"Skipping report for team {team.name}: No recipients configured.")
                 continue
-
             print(f"Generating report for team {team.name}...")
             report_html = generate_daily_report(team.id)
-
             if not report_html:
                 print(f"No entries for team {team.name} in the last 24 hours. Skipping report.")
                 continue
-
             subject = f"Daily Standup Report for {team.name} - {date.today().isoformat()}"
-            
             requests.post(
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
                 json={
-                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}>",
+                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}">",
                     "to": recipients,
                     "subject": subject,
                     "html": report_html,
@@ -516,27 +499,21 @@ def process_weekly_reports():
             weekly_report_day = team.settings.get("weeklyReportDay", "Friday")
             report_time_str = team.settings.get("summaryTime", "17:00")
             report_hour = int(report_time_str.split(":")[0])
-
-            # Check if it's the right day and hour to send the report
             if today_name != weekly_report_day or datetime.utcnow().hour != report_hour:
                 continue
-
-            recipients = team.report_recipients
+            recipients = list(team.report_recipients or [])
             if not recipients:
                 continue
-
             print(f"Generating weekly report for team {team.name}...")
             report_html = generate_weekly_report(team.id)
-
             if not report_html:
                 continue
-
             subject = f"Weekly Standup Report for {team.name} - Week of {date.today().isoformat()}"
             requests.post(
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
                 json={
-                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}>",
+                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}">",
                     "to": recipients, "subject": subject, "html": report_html
                 }
             )
@@ -553,26 +530,21 @@ def remove_member_from_team(team_id: str, member_id_to_remove: str, requester_id
         team = session.query(Team).filter_by(id=team_id).first()
         if not team:
             raise ValueError("Team not found.")
-        
         # Check if the requester is the owner
-        if team.owner_id != requester_id:
+        if str(team.owner_id) != str(requester_id):
             raise PermissionError("Only the team owner can remove members.")
-            
         # The owner cannot remove themselves
         if member_id_to_remove == team.owner_id:
             raise ValueError("The team owner cannot be removed.")
-            
         member_to_remove = session.query(TeamMember).filter_by(
             team_id=team_id, 
             user_id=member_id_to_remove
         ).first()
-        
         if not member_to_remove:
             raise ValueError("Member not found in this team.")
-            
         session.delete(member_to_remove)
         session.commit()
-        return {"status": "success", "message": "Member removed."} 
+        return {"status": "success", "message": "Member removed."}
 
 def get_team_members(team_id: str):
     """Fetches all members of a team and enriches them with Clerk user data."""

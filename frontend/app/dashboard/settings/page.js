@@ -5,6 +5,7 @@ import { useAuth, useUser } from '@clerk/nextjs';
 import TeamSelector from '../../../components/TeamSelector'; // Adjust path as needed
 import SettingsForm from '../../../components/SettingsForm'; // Adjust path as needed
 import MembersList from '../../../components/MembersList';
+import SubmissionDashboard from '../../../components/SubmissionDashboard';
 
 export default function SettingsPage() {
     const { getToken } = useAuth();
@@ -13,7 +14,7 @@ export default function SettingsPage() {
     const [selectedTeam, setSelectedTeam] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTab, setActiveTab] = useState('settings');
+    const [activeTab, setActiveTab] = useState('profile');
 
     useEffect(() => {
         const fetchTeams = async () => {
@@ -67,6 +68,16 @@ export default function SettingsPage() {
                     <div className="border-b border-gray-200 mb-6">
                         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                             <button
+                                onClick={() => setActiveTab('profile')}
+                                className={`${
+                                    activeTab === 'profile'
+                                        ? 'border-blue-500 text-blue-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                            >
+                                Profile
+                            </button>
+                            <button
                                 onClick={() => setActiveTab('settings')}
                                 className={`${
                                     activeTab === 'settings'
@@ -84,10 +95,23 @@ export default function SettingsPage() {
                                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                 } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                             >
-                                Members ({/* Placeholder for member count */})
+                                Members
                             </button>
                         </nav>
                     </div>
+
+                    {activeTab === 'profile' && user && (
+                        <div className="mb-8">
+                            <div className="flex items-center gap-6 mb-6">
+                                <img src={user.imageUrl} alt="Avatar" className="w-20 h-20 rounded-full border" />
+                                <div>
+                                    <div className="font-bold text-xl">{user.fullName || user.username}</div>
+                                    <div className="text-gray-600">{user.primaryEmailAddress?.emailAddress}</div>
+                                </div>
+                            </div>
+                            <SubmissionDashboard userId={user.id} />
+                        </div>
+                    )}
 
                     {activeTab === 'settings' && (
                         isOwner ? (
