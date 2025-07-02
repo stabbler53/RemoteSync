@@ -442,7 +442,7 @@ def process_daily_reports():
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
                 json={
-                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}">",
+                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}>",
                     "to": recipients,
                     "subject": subject,
                     "html": report_html,
@@ -513,7 +513,7 @@ def process_weekly_reports():
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
                 json={
-                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}">",
+                    "from": f"RemoteSync Reports <reports@{os.getenv('RESEND_DOMAIN', 'yourdomain.com')}>",
                     "to": recipients, "subject": subject, "html": report_html
                 }
             )
