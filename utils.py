@@ -112,8 +112,8 @@ def log_to_db(user_id: str, text: str, summary: str, audio_url: Optional[str], t
 def upload_audio_to_supabase(audio_bytes, filename):
     # Upload to the 'audio' bucket (create it in Supabase dashboard if not exists)
     res = supabase.storage.from_('audio').upload(filename, audio_bytes)
-    if res.get('error'):
-        raise Exception(res['error']['message'])
+    if hasattr(res, "error") and res.error:
+        raise Exception(res.error.message if hasattr(res.error, "message") else str(res.error))
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/audio/{filename}"
     return public_url
 
@@ -347,8 +347,7 @@ def update_team_settings_in_db(team_id: str, settings_data: TeamSettingsUpdate, 
             raise PermissionError("Only the team owner can update settings.")
         # Update settings if provided
         if settings_data.settings is not None:
-            # Merge existing settings with new ones
-            updated_settings = dict(team.settings) if team.settings else {}
+            updated_settings = team.settings.copy() if team.settings else {}
             updated_settings.update(settings_data.settings)
             team.settings = updated_settings
         # Update report recipients if provided
@@ -410,7 +409,7 @@ def generate_daily_report(team_id: str) -> Optional[str]:
             user_name = f"{user.first_name} {user.last_name}" if user else "Unknown User"
             html_content += f"<h3>{user_name}</h3>"
             html_content += f"<blockquote>{entry.summary.replace(chr(10), '<br>')}</blockquote>"
-            if entry.audio_url and entry.audio_url != '':
+            if getattr(entry, "audio_url", None):
                 html_content += f"<p><a href='{entry.audio_url}'>Listen to audio update</a></p>"
             html_content += "<hr>"
         return html_content
@@ -428,7 +427,7 @@ def process_daily_reports():
             report_hour = int(report_time_str.split(":")[0])
             if datetime.utcnow().hour != report_hour:
                 continue
-            recipients = list(team.report_recipients or [])
+            recipients = team.report_recipients or []
             if not recipients:
                 print(f"Skipping report for team {team.name}: No recipients configured.")
                 continue
@@ -501,7 +500,7 @@ def process_weekly_reports():
             report_hour = int(report_time_str.split(":")[0])
             if today_name != weekly_report_day or datetime.utcnow().hour != report_hour:
                 continue
-            recipients = list(team.report_recipients or [])
+            recipients = team.report_recipients or []
             if not recipients:
                 continue
             print(f"Generating weekly report for team {team.name}...")
