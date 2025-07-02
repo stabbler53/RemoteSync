@@ -5,4 +5,6 @@ pygsheets
 python-multipart
 python-dotenv
 sqlalchemy
-boto3 
+boto3
+supabase
+apscheduler 
