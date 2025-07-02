@@ -1,6 +1,5 @@
 import os
 from fastapi import Depends, HTTPException, Header
-from clerk import Clerk
 from models import User
 from utils import clerk # Import the initialized client
 
