@@ -1,0 +1,16 @@
+Daily Standup Report 2024-06-01
+
+Alice:
+- Completed: Finished login page UI
+- In Progress: Integrating OAuth
+- Blocked: Waiting for API credentials
+
+Bob:
+- Completed: Set up database schema
+- In Progress: Writing API endpoints
+- Blocked: None
+
+Carol:
+- Completed: Deployed backend to Replit
+- In Progress: Adding email notifications
+- Blocked: SendGrid rate limit 

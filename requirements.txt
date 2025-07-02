@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+requests
+pygsheets
+python-multipart
+python-dotenv
+sqlalchemy
+boto3 
